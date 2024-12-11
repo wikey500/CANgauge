@@ -132,16 +132,16 @@ void loop() {
     #endif
 
     switch(modes[currentMode]){
-      case ENGINE_RPM_PID:  //DONE
+      case ENGINE_RPM_PID:
         calcEngineRPM();
         break;
-      case COOLANT_PID: //DONE
+      case COOLANT_PID:
         calcCoolantTemp();
         break;
       case IGN_TIMING_PID:
         calcIgnTiming();
         break;
-      case INTAKE_TEMP_PID:   //DONE
+      case INTAKE_TEMP_PID:
         calcIntakeTemp();
         break;
       default:
@@ -150,7 +150,6 @@ void loop() {
         break;
     }
     
-    //sendDataRequest(modes[currentMode]);
   } else if(millis() - previousMillis >= INTERVAL) {
     previousMillis = millis();
     #if DEBUG
@@ -212,7 +211,11 @@ void loop() {
             }
             bool oddFrame = true;
             sendDTCFlowControlFrame();
-            //delay(15);
+            requestSent = millis();
+            for(int i = 0; i<8; i++){
+              sensorData[i] = 0;
+            }
+            while(millis() - requestSent < 100){};
             readCanBuf();
             for(int i = 0; i < codesToGo; i++){
               if(i == 3 && oddFrame){
@@ -221,7 +224,6 @@ void loop() {
                 oddFrame = false;
                 prevByte = sensorData[7];
                 readCanBuf();
-                // delay(15);
               } else if(i == 3 && !oddFrame){
                 i -= 4;
                 codesToGo -= 4;
@@ -252,11 +254,7 @@ void loop() {
         drawGauge();
         drawNeedle();
       }
-    }
-
-    //DELETE IF NECESSARY:
-    //delay(20);
-  
+    }  
   }
 }
 
@@ -284,7 +282,7 @@ void getErrorCode(int rawCode){
   }
 }
 
-void initRecvFilter(){  //DONE
+void initRecvFilter(){
   //Set same mask for both recv buffers
   //11-bit mask, so 7FC means top 9 bits of sender ID will be compared with filters
   CAN.init_Mask(0,0, 0x7FC);
@@ -303,7 +301,7 @@ void initRecvFilter(){  //DONE
   CAN.init_Filt( 5, 0, OBD2_ENGINE_ID);
 }
 
-void sendDataRequest(unsigned char CAN_PID){  //DONE
+void sendDataRequest(unsigned char CAN_PID){ 
   //message structure: {[2 bytes of data], [mode 1], [sensor to query], [5 bytes padding]}
   //mode 1: read live data
   unsigned char req[8] = {0x02, 0x01, CAN_PID, 0x00, 0x00, 0x00, 0x00, 0x00};
@@ -314,7 +312,6 @@ void sendDataRequest(unsigned char CAN_PID){  //DONE
   SERIAL_PORT_MONITOR.flush();
   #endif
   CAN.sendMsgBuf(OBD2_GATEWAY_ID, 0, 8, req);
-  // delay(150);
 }
 
 void sendDTCFlowControlFrame(){
@@ -324,7 +321,6 @@ void sendDTCFlowControlFrame(){
   SERIAL_PORT_MONITOR.flush();
   #endif
   CAN.sendMsgBuf(OBD2_GATEWAY_ID, 0, 8, req);
-  // delay(150);
 }
 
 void sendDTCRequest(){  //send DTC request packet
@@ -336,15 +332,12 @@ void sendDTCRequest(){  //send DTC request packet
   SERIAL_PORT_MONITOR.flush();
   #endif
   CAN.sendMsgBuf(OBD2_GATEWAY_ID, 0, 8, req);
-  // delay(150);
 }
 
 void calcEngineRPM(){
   data = ((256*int(sensorData[3]) + int(sensorData[4])) * 0.25);
   percent = data * 100 / double(MAX_RPM);
   #if DEBUG
-  //SERIAL_PORT_MONITOR.print(F("CAN ID:"));
-  //SERIAL_PORT_MONITOR.println(CANid);
   SERIAL_PORT_MONITOR.println(F("Raw upper byte:"));
   SERIAL_PORT_MONITOR.println(sensorData[3]);
   SERIAL_PORT_MONITOR.println(F("Raw lower byte:"));
@@ -466,19 +459,19 @@ int readCanBuf(){  //get pending message
 }
 
 //draw semicircle for gauge
-void drawGauge(){   //DONE
+void drawGauge(){
   tft.fillScreen(ST77XX_BLACK);
   tft.drawCircle(120, 200, 119, 0xFFFF);
   tft.fillRect(0, 280, 240, 40, 0x0000);
 }
 //draw needle at 0
-void drawNeedle(){  //DONE
+void drawNeedle(){
   lastx = 32;
   lasty = 280;
   tft.drawLine(32, 280, 120, 200, 0xF000);
 }
 
-void setupDTCScreen(){  //tweak
+void setupDTCScreen(){
   tft.fillScreen(ST77XX_BLACK);
   tft.setCursor(0,0);
   tft.setTextSize(2);
@@ -486,7 +479,7 @@ void setupDTCScreen(){  //tweak
   tft.print(F("Stored Error Codes:"));
 }
 
-void updateDigital(double data, int decimals){  //tweak
+void updateDigital(double data, int decimals){
   tft.fillRect(0, 0, 240, 80, 0x0000);
   tft.setCursor(80, 40);
   tft.setTextSize(5);
@@ -521,23 +514,20 @@ void updateDigitalUnits(unsigned char parameter){
   tft.print(units);
 }
 
-void updateNeedle(double percent){  //DONE
-  //drawGauge();
+void updateNeedle(double percent){
   double angle = percent * -2.6328 + 42;
   angle = angle * p / 180;
   double xval = 118 * cos(angle) + 120;
   double yval = 118 * sin(angle) + 200;
-  //SERIAL_PORT_MONITOR.println(xval);
   int16_t xcoord = round(xval);
   int16_t ycoord = round(yval);
-  //SERIAL_PORT_MONITOR.println(xcoord);
   tft.drawLine(lastx, lasty, 120, 200, 0x0000);
   tft.drawLine(X_OFFSET - xcoord, ycoord, 120, 200, 0xF000);
   lastx = X_OFFSET-xcoord;
   lasty = ycoord;
 }
 
-void handleChangeInterrupt(){   //DONE
+void handleChangeInterrupt(){
   static unsigned long last_interrupt = 0;
   unsigned long interrupt_now = millis();
   if(interrupt_now - last_interrupt > 500){
